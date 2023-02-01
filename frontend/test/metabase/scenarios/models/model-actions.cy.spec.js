@@ -3,6 +3,7 @@ import {
   modal,
   popover,
   restore,
+  fillActionQuery,
 } from "__support__/e2e/helpers";
 
 import { createMockActionParameter } from "metabase-types/api/mocks";
