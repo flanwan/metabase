@@ -95,8 +95,8 @@ describe("scenarios > models > actions", () => {
       cy.findByText("Delete").should("be.visible");
     });
 
-    cy.findByRole("link", { name: "New action" }).click();
-    fillQuery("DELETE FROM orders WHERE id = {{ id }}");
+    cy.findByRole("button", { name: "New action" }).click();
+    fillActionQuery("DELETE FROM orders WHERE id = {{ id }}");
     fieldSettings().findByText("number").click();
     cy.findByRole("button", { name: "Save" }).click();
     modal().within(() => {
@@ -108,7 +108,7 @@ describe("scenarios > models > actions", () => {
       .should("be.visible");
 
     openActionEditorFor("Delete Order");
-    fillQuery(" AND status = 'pending'");
+    fillActionQuery(" AND status = 'pending'");
     fieldSettings()
       .findByRole("radiogroup", { name: "Field type" })
       .findByLabelText("number")
@@ -228,17 +228,6 @@ function openActionEditorFor(actionName, { isReadOnly = false } = {}) {
     const icon = isReadOnly ? "eye" : "pencil";
     cy.icon(icon).click();
   });
-}
-
-function fillQuery(query) {
-  cy.get(".ace_content").type(query, { parseSpecialCharSequences: false });
-}
-
-function assertQueryEditorDisabled() {
-  // Ace doesn't act as a normal input, so we can't use `should("be.disabled")`
-  // Instead we'd assert that a user can't type in the editor
-  fillQuery("QWERTY");
-  cy.findByText("QWERTY").should("not.exist");
 }
 
 function fieldSettings() {
