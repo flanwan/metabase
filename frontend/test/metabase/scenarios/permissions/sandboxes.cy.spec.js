@@ -779,7 +779,7 @@ describeEE("formatting > sandboxes", () => {
       cy.signInAsSandboxedUser();
       createJoinedQuestion("14841", { visitQuestion: true });
 
-      cy.findByText("Settings").click();
+      cy.findByTestId("viz-settings-button").click();
       cy.findByTestId("sidebar-left")
         .should("be.visible")
         .within(() => {
