@@ -1,4 +1,5 @@
-import { Dashboard } from "metabase-types/api";
+import type { Card, Dashboard, DashboardOrderedCard } from "metabase-types/api";
+import { createMockCard } from "./card";
 
 export const createMockDashboard = (opts?: Partial<Dashboard>): Dashboard => ({
   id: 1,
@@ -14,6 +15,45 @@ export const createMockDashboard = (opts?: Partial<Dashboard>): Dashboard => ({
     first_name: "John",
     last_name: "Doe",
     timestamp: "2018-01-01",
+  },
+  ...opts,
+});
+
+export const createMockDashboardOrderedCard = (
+  opts?: Partial<DashboardOrderedCard>,
+): DashboardOrderedCard => ({
+  id: 1,
+  dashboard_id: 1,
+  col: 0,
+  row: 0,
+  card_id: 1,
+  size_x: 1,
+  size_y: 1,
+  entity_id: "abc_123",
+  visualization_settings: {},
+  card: createMockCard(),
+  created_at: "2020-01-01T12:30:30.000000",
+  updated_at: "2020-01-01T12:30:30.000000",
+  justAdded: false,
+  ...opts,
+});
+
+export const createMockDashboardCardWithVirtualCard = (
+  opts?: Partial<DashboardOrderedCard>,
+): DashboardOrderedCard => ({
+  ...createMockDashboardOrderedCard(),
+  card: {
+    query_average_duration: null,
+  } as Card,
+  card_id: null,
+  visualization_settings: {
+    virtual_card: {
+      archived: false,
+      dataset_query: {},
+      display: "text",
+      name: null,
+      visualization_settings: {},
+    } as unknown as Card,
   },
   ...opts,
 });
