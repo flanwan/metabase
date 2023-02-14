@@ -1,20 +1,17 @@
 import React, { useState } from "react";
 import { t } from "ttag";
 
-import Button from "metabase/core/components/Button";
 import Input from "metabase/core/components/Input";
 import SearchResults from "metabase/nav/components/SearchResults";
 import TippyPopover from "metabase/components/Popover/TippyPopover";
 import Ellipsified from "metabase/core/components/Ellipsified";
 import Icon from "metabase/components/Icon";
 
-import type { SearchEntity, DashboardOrderedCard } from "metabase-types/api";
+import type { DashboardOrderedCard } from "metabase-types/api";
 
 import { useToggle } from "metabase/hooks/use-toggle";
 import Search from "metabase/entities/search";
-import Icon from "metabase/components/Icon";
 
-import type { DashboardOrderedCard } from "metabase-types/api";
 import { isEmpty } from "metabase/lib/validate";
 import { color } from "metabase/lib/colors";
 
@@ -22,17 +19,20 @@ import { EntityDisplay } from "./EntityDisplay";
 
 import { settings, LinkCardSettings } from "./LinkVizSettings";
 
+import type { LinkEntity } from "./types";
+
 import {
   EditLinkCardWrapper,
   DisplayLinkCardWrapper,
   CardLink,
   SearchResultsContainer,
   EntityEditContainer,
+  Button,
 } from "./LinkViz.styled";
 
 import { isUrlString } from "./utils";
 
-interface LinkVizProps {
+export interface LinkVizProps {
   dashcard: DashboardOrderedCard;
   isEditing: boolean;
   isPreviewing: boolean;
@@ -61,11 +61,14 @@ function LinkViz({
   const handleLinkChange = (newLink: string) =>
     onUpdateVisualizationSettings({ link: { url: newLink } });
 
-  const handleEntitySelect = (entity: SearchEntity) => {
+  const handleEntitySelect = (entity: LinkEntity) => {
     onUpdateVisualizationSettings({
       link: {
         entity: {
           id: entity.id,
+          database_id:
+            entity.model === "table" ? entity.database_id : undefined,
+          table_id: entity.model === "table" ? entity.id : undefined,
           name: entity.name,
           model: entity.model,
           description: entity.description,
@@ -79,52 +82,49 @@ function LinkViz({
     useToggle();
 
   const showEditor = isEditing && !isPreviewing && !isSettings;
-  const wrappedEntity = Search.wrapEntity(entity);
+  const wrappedEntity = Search.wrapEntity({ ...entity, collection: {} });
 
   if (showEditor) {
     return (
       <EditLinkCardWrapper>
         {!!entity && (
           <EntityEditContainer>
-            <EntityDisplay entity={wrappedEntity} showDescription={false} />
             <Button
               onClick={() => {
                 handleLinkChange(entity.name);
                 setAutoFocus(true);
               }}
-              icon="search"
-              onlyIcon
-            />
+              onlyText
+            >
+              <EntityDisplay entity={wrappedEntity} showDescription={false} />
+            </Button>
           </EntityEditContainer>
         )}
         {!entity && (
-          <>
-            <TippyPopover
-              visible={!!url?.length && inputIsFocused && !isUrlString(url)}
-              content={
-                <SearchResultsContainer>
-                  <SearchResults
-                    searchText={url?.trim()}
-                    onEntitySelect={handleEntitySelect}
-                  />
-                </SearchResultsContainer>
-              }
-              placement="bottom"
-            >
-              <Input
-                fullWidth
-                type="search"
-                value={url ?? ""}
-                autoFocus={autoFocus}
-                placeholder={t`https://example.com`}
-                onChange={e => handleLinkChange(e.target.value)}
-                onFocus={onFocusInput}
-                onBlur={onBlurInput}
-                // the dashcard really wants to turn all mouse events into drag events
-                onMouseDown={e => e.stopPropagation()}
-              />
-            </TippyPopover>
-          </>
+          <TippyPopover
+            visible={!!url?.length && inputIsFocused && !isUrlString(url)}
+            content={
+              <SearchResultsContainer>
+                <SearchResults
+                  searchText={url?.trim()}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </SearchResultsContainer>
+            }
+            placement="bottom"
+          >
+            <Input
+              fullWidth
+              value={url ?? ""}
+              autoFocus={autoFocus}
+              placeholder={t`https://example.com`}
+              onChange={e => handleLinkChange(e.target.value)}
+              onFocus={onFocusInput}
+              onBlur={onBlurInput}
+              // the dashcard really wants to turn all mouse events into drag events
+              onMouseDown={e => e.stopPropagation()}
+            />
+          </TippyPopover>
         )}
       </EditLinkCardWrapper>
     );
