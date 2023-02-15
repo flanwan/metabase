@@ -321,7 +321,7 @@
                                                    :series                     []}]})
                    (dashboard-response (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id)))))))))
 
-    (testing "a dashboard that has lin cards on it"
+    (testing "a dashboard that has link cards on it"
       (let [link-card-viz-setting (fn [model id]
                                     {:virtual_card {:display "link"}
                                      :link         {:entity {:id    id
@@ -352,14 +352,19 @@
                                              :visualization_settings (link-card-viz-setting "card" card-id)}
            DashboardCard _                  {:dashboard_id           dashboard-id
                                              :visualization_settings (link-card-viz-setting "dataset" model-id)}]
-          (is (=? [{:id db-id    :model "database"  :name "Linked database"  :description "Linked database desc"  :display nil}
-                   {:id table-id :model "table"     :name "Linked table"     :description "Linked table desc"     :display nil}
-                   {:id dash-id  :model "dashboard" :name "Linked Dashboard" :description "Linked Dashboard desc" :display nil}
-                   {:id card-id  :model "card"      :name "Linked card"      :description "Linked card desc"      :display "bar"}
-                   {:id model-id :model "dataset"   :name "Linked model"     :description "Linked model desc"     :display "table"}]
-                  (->> (dashboard-response (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id)))
-                       :ordered_cards
-                       (map #(get-in % [:visualization_settings :link :entity]))))))))
+          (is (= [{:id db-id    :model "database"  :name "Linked database"  :description "Linked database desc"  :display nil
+                   :db_id nil   :collection_id nil}
+                  {:id table-id :model "table"     :name "Linked table"     :description "Linked table desc"     :display nil
+                   :db_id db-id :collection_id nil}
+                  {:id dash-id  :model "dashboard" :name "Linked Dashboard" :description "Linked Dashboard desc" :display nil
+                   :db_id nil   :collection_id nil}
+                  {:id card-id  :model "card"      :name "Linked card"      :description "Linked card desc"      :display "bar"
+                   :db_id nil   :collection_id nil}
+                  {:id model-id :model "dataset"   :name "Linked model"     :description "Linked model desc"     :display "table"
+                   :db_id nil   :collection_id nil}]
+                 (->> (dashboard-response (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id)))
+                      :ordered_cards
+                      (map #(get-in % [:visualization_settings :link :entity]))))))))
 
     (testing "fetch a dashboard with a param in it"
       (mt/with-temp* [Table         [{table-id :id} {}]

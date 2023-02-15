@@ -6,6 +6,7 @@
    [clojure.string :as str]
    [medley.core :as m]
    [metabase.automagic-dashboards.populate :as populate]
+   [metabase.db :as mdb]
    [metabase.db.query :as mdb.query]
    [metabase.events :as events]
    [metabase.models.card :as card :refer [Card]]
@@ -13,6 +14,7 @@
    [metabase.models.dashboard-card
     :as dashboard-card
     :refer [DashboardCard]]
+   [metabase.models.database :refer [Database]]
    [metabase.models.field-values :as field-values]
    [metabase.models.interface :as mi]
    [metabase.models.parameter-card :as parameter-card]
@@ -25,6 +27,7 @@
    [metabase.models.serialization.base :as serdes.base]
    [metabase.models.serialization.hash :as serdes.hash]
    [metabase.models.serialization.util :as serdes.util]
+   [metabase.models.table :refer [Table]]
    [metabase.moderation :as moderation]
    [metabase.public-settings :as public-settings]
    [metabase.query-processor.async :as qp.async]
@@ -37,33 +40,66 @@
    [toucan.db :as db]
    [toucan.hydrate :refer [hydrate]]
    [toucan.models :as models]
-   [toucan2.core :as t2]
-   [toucan2.model :as t2.model]))
+   [toucan2.core :as t2]))
+
+(comment moderation/keep-me)
+
+(models/defmodel Dashboard :report_dashboard)
 
 ;;; --------------------------------------------------- Hydration ----------------------------------------------------
 
-(def ^:private link-card-columns-for-model
-  {:database  [:id :name :description [nil :display]]
-   :table     [:id :name :description [nil :display]]
-   :dashboard [:id :name :description [nil :display]]
-   :card      [:id :name :description :display]
-   :dataset   [:id :name :description :display]})
+(def ^:private all-card-info-columns
+  {:model         :text
+   :id            :integer
+   :name          :text
+   :description   :text
 
-(defn- link-card-model->toucan-model
+   ;; for cards and datasets
+   :collection_id :integer
+   :display       :text
+
+   ;; for tables
+   :db_id        :integer})
+
+(def ^:private link-card-columns->model
+  {:database  #{:id :name :description}
+   :table     #{:id :name :description :db_id}
+   :dashboard #{:id :name :description}
+   :card      #{:id :name :collection_id :description :display}
+   :dataset   #{:id :name :collection_id :description :display}})
+
+(defn- link-card-columns-for-model
   [model]
-  (-> ({:database  'Database
-        :table     'Table
-        :dashboard 'Dashboard
-        :card      'Card
-        :dataset   'Card}
-       model)
-      t2.model/resolve-model
-      t2/table-name))
+  (let [model-cols-set (link-card-columns->model model)]
+    (for [[col col-type] all-card-info-columns]
+      (cond
+        (= col :model)
+        [(h2x/literal model) :model]
+
+        (model-cols-set col)
+        col
+        ;; This entity is missing the column, project a null for that column value. For Postgres and H2, cast it to the
+        ;; correct type, e.g.
+        ;;
+        ;;    SELECT cast(NULL AS integer)
+        ;;
+        ;; For MySQL, this is not needed.
+        :else
+        [(when-not (= (mdb/db-type) :mysql)
+           [:cast nil col-type])
+         col]))))
+
+(def ^:private link-card-model->toucan-model
+  {:database  Database
+   :table     Table
+   :dashboard Dashboard
+   :card      Card
+   :dataset   Card})
 
 (defn- link-card-info-query-for-model
   [[model ids]]
   {:select (cons [(h2x/literal model) :model] (link-card-columns-for-model model))
-   :from   (link-card-model->toucan-model model)
+   :from   (t2/table-name (link-card-model->toucan-model model))
    :where  [:in :id ids]})
 
 (defn- link-card-info-query
@@ -91,16 +127,19 @@
                                 (map #(get-in % entity-path))
                                 (group-by :model)
                                 (map (fn [[k v]] [(keyword k) (set (map :id v))])))
-                  ;; query all entities in 1 db call
-                  ;; {[:table 3] {:name ...}}
+        ;; query all entities in 1 db call
+        ;; {[:table 3] {:name ...}}
         model-and-id->info (when (seq model-and-ids)
-                             (->> (t2/query (link-card-info-query model-and-ids))
-                                  (m/index-by (juxt :model :id))))]
+                             (-> (m/index-by (juxt :model :id) (t2/query (link-card-info-query model-and-ids)))
+                                 (update-vals (fn [{model :model :as instance}]
+                                                (if (mi/can-read? (t2/instance (link-card-model->toucan-model (keyword model)) instance))
+                                                  instance
+                                                  {:restricted true})))))]
     (map (fn [card]
            (if-let [model-info (->> (get-in card entity-path)
                                     ((juxt :model :id))
                                     (get model-and-id->info))]
-             (update-in card entity-path merge model-info)
+             (assoc-in card entity-path model-info)
              card))
          ordered-cards)))
 
@@ -136,9 +175,6 @@
       (for [dashboard dashboards]
         (assoc dashboard :collection_authority_level (get coll-id->level (u/the-id dashboard)))))))
 
-(comment moderation/keep-me)
-
-(models/defmodel Dashboard :report_dashboard)
 
 (derive Dashboard ::perms/use-parent-collection-perms)
 
