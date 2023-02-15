@@ -64,9 +64,9 @@
 (def ^:private link-card-columns->model
   {:database  #{:id :name :description}
    :table     #{:id :name :description :db_id}
-   :dashboard #{:id :name :description}
-   :card      #{:id :name :collection_id :description :display}
-   :dataset   #{:id :name :collection_id :description :display}})
+   :dashboard #{:id :name :description :collection_id}
+   :card      #{:id :name :description :collection_id :display}
+   :dataset   #{:id :name :description :collection_id :display}})
 
 (defn- link-card-columns-for-model
   [model]

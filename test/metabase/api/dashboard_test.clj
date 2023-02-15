@@ -325,22 +325,30 @@
       (let [link-card-viz-setting (fn [model id]
                                     {:virtual_card {:display "link"}
                                      :link         {:entity {:id    id
-                                                             :model model}}})]
+                                                             :model model}}})
+            link-card-info-from-resp (fn [resp]
+                                       (->> resp
+                                            :ordered_cards
+                                            (map #(get-in % [:visualization_settings :link :entity]))))
+            crowberto-pc-id         (db/select-one-field :id Collection :personal_owner_id (mt/user->id :crowberto))]
         (t2.with-temp/with-temp
           [Database      {db-id :id}        {:name        "Linked database"
                                              :description "Linked database desc"}
            Table         {table-id    :id}  {:db_id        db-id
                                              :name        "Linked table"
                                              :description "Linked table desc"}
-           Card          {card-id :id}      {:name        "Linked card"
-                                             :description "Linked card desc"
-                                             :display     "bar"}
-           Card          {model-id :id}     {:dataset     true
-                                             :name        "Linked model"
-                                             :description "Linked model desc"
-                                             :display     "table"}
-           Dashboard     {dash-id :id}      {:name        "Linked Dashboard"
-                                             :description "Linked Dashboard desc"}
+           Card          {card-id :id}      {:name          "Linked card"
+                                             :description   "Linked card desc"
+                                             :display       "bar"
+                                             :collection_id crowberto-pc-id}
+           Card          {model-id :id}     {:dataset       true
+                                             :name          "Linked model"
+                                             :description   "Linked model desc"
+                                             :display       "table"
+                                             :collection_id crowberto-pc-id}
+           Dashboard     {dash-id :id}      {:name          "Linked Dashboard"
+                                             :description   "Linked Dashboard desc"
+                                             :collection_id crowberto-pc-id}
            Dashboard     {dashboard-id :id} {:name        "Test Dashboard"}
            DashboardCard _                  {:dashboard_id           dashboard-id
                                              :visualization_settings (link-card-viz-setting "database" db-id)}
@@ -353,18 +361,24 @@
            DashboardCard _                  {:dashboard_id           dashboard-id
                                              :visualization_settings (link-card-viz-setting "dataset" model-id)}]
           (is (= [{:id db-id    :model "database"  :name "Linked database"  :description "Linked database desc"  :display nil
-                   :db_id nil   :collection_id nil}
+                   :db_id nil   :collection_id     nil}
                   {:id table-id :model "table"     :name "Linked table"     :description "Linked table desc"     :display nil
-                   :db_id db-id :collection_id nil}
+                   :db_id db-id :collection_id     nil}
                   {:id dash-id  :model "dashboard" :name "Linked Dashboard" :description "Linked Dashboard desc" :display nil
-                   :db_id nil   :collection_id nil}
+                   :db_id nil   :collection_id     crowberto-pc-id}
                   {:id card-id  :model "card"      :name "Linked card"      :description "Linked card desc"      :display "bar"
-                   :db_id nil   :collection_id nil}
+                   :db_id nil   :collection_id     crowberto-pc-id}
                   {:id model-id :model "dataset"   :name "Linked model"     :description "Linked model desc"     :display "table"
-                   :db_id nil   :collection_id nil}]
-                 (->> (dashboard-response (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id)))
-                      :ordered_cards
-                      (map #(get-in % [:visualization_settings :link :entity]))))))))
+                   :db_id nil   :collection_id     crowberto-pc-id}]
+                 (link-card-info-from-resp
+                   (mt/user-http-request :crowberto :get 200 (format "dashboard/%d" dashboard-id)))))
+
+          (testing "should return restricted if user doesn't have permission to view it"
+            (perms/revoke-data-perms! (perms-group/all-users) db-id)
+            (is (= #{{:restricted true}}
+                   (set (link-card-info-from-resp
+                          (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id))))))))))
+
 
     (testing "fetch a dashboard with a param in it"
       (mt/with-temp* [Table         [{table-id :id} {}]
