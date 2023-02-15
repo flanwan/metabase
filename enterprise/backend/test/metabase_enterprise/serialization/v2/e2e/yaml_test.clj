@@ -11,6 +11,7 @@
    [metabase.models :refer [Card
                             Collection
                             Dashboard
+                            DashboardCard
                             Database
                             ParameterCard
                             Field
@@ -21,7 +22,11 @@
    [metabase.test.generate :as test-gen]
    [reifyhealth.specmonstah.core :as rs]
    [toucan.db :as db]
-   [yaml.core :as yaml]))
+   [toucan2.tools.with-temp :as t2.with-temp]
+   [yaml.core :as yaml])
+  (:import
+   (java.io File)
+   (java.nio.file Path)))
 
 (set! *warn-on-reflection* true)
 
@@ -55,11 +60,11 @@
                    empty?)]
     coll-dir))
 
-(defn- file-set [dir]
-  (let [base (.toPath dir)]
-    (set (for [file (file-seq dir)
+(defn- file-set [^File dir]
+  (let [^Path base (.toPath dir)]
+    (set (for [^File file (file-seq dir)
                :when (.isFile file)
-               :let [rel (.relativize base (.toPath file))]]
+               :let [rel (.relativize  base (.toPath file))]]
            (mapv str rel)))))
 
 (defn- random-keyword
@@ -492,3 +497,82 @@
                                first
                                :values_source_config)))
                     (is (some? (db/select-one 'ParameterCard :parameterized_object_type "card" :parameterized_object_id (:id card2d))))))))))))))
+
+#_(deftest dashcards-with-link-cards-test
+    (ts/with-random-dump-dir [dump-dir "serdesv2-"]
+      (ts/with-source-and-dest-dbs
+        (ts/with-source-db
+          (let [link-card-viz-setting (fn [model id]
+                                        {:virtual_card {:display "link"}
+                                         :link         {:entity {:id    id
+                                                                 :model model}}})
+                extracted             (atom nil)]
+            (t2.with-temp/with-temp
+              [Collection    {coll-id :id}             {:name "My Collection"}
+               Database      {db-id   :id
+                              db-name :name
+                              db-eid  :entity_id}      {:name        "Linked database"
+                                                        :description "Linked database desc"}
+               Table         {table-id   :id
+                              table-name :name
+                              table-eid  :entity_id}   {:db_id        db-id
+                                                        :name        "Linked table"
+                                                        :description "Linked table desc"}
+               Card          {card-id   :id
+                              card-name :name
+                              card-eid  :entity_id}    {:name          "Linked card"
+                                                        :description   "Linked card desc"
+                                                        :display       "bar"}
+
+               Card          {model-id   :id
+                              model-name :name
+                              model-eid  :entity_id}   {:dataset       true
+                                                        :name          "Linked model"
+                                                        :description   "Linked model desc"
+                                                        :display       "table"}
+
+               Dashboard     {dash-id   :id
+                              dash-name :name
+                              dash-eid  :entity_id}    {:name          "Linked Dashboard"
+                                                        :collection_id coll-id
+                                                        :description   "Linked Dashboard desc"}
+               Dashboard     {dashboard-id  :id
+                              :as dash}                {:name          "Test Dashboard"
+                                                        :collection_id coll-id}
+               DashboardCard _                         {:dashboard_id           dashboard-id
+                                                        :visualization_settings (link-card-viz-setting "database" db-id)}
+               DashboardCard _                         {:dashboard_id           dashboard-id
+                                                        :visualization_settings (link-card-viz-setting "table" table-id)}
+               DashboardCard _                         {:dashboard_id           dashboard-id
+                                                        :visualization_settings (link-card-viz-setting "dashboard" dash-id)}
+               DashboardCard _                         {:dashboard_id           dashboard-id
+                                                        :visualization_settings (link-card-viz-setting "card" card-id)}
+               DashboardCard _                         {:dashboard_id           dashboard-id
+                                                        :visualization_settings (link-card-viz-setting "dataset" model-id)}]
+
+
+              (testing "extract and store"
+                (let [extraction (into [] (extract/extract-metabase {}))]
+                  (is (= [{:model "database"  :id "Linked database",}
+                          {:model "table"     :id ["Linked database" "Linked table"],}
+                          {:model "dashboard" :id dash-eid}
+                          {:model "card"      :id card-eid}
+                          {:model "dataset"   :id model-eid}]
+                         (->> (second (by-model extraction "Dashboard"))
+                              :ordered_cards
+                              (map #(get-in % [:visualization_settings :link :entity])))))
+                  (storage.yaml/store! (seq extraction) dump-dir)))
+
+              (testing "ingest and load"
+                ;; ingest
+                (ts/with-dest-db
+                  (testing "doing ingestion"
+                    (is (serdes.load/load-metabase (ingest.yaml/ingest-yaml dump-dir))
+                        "successful"))
+                  #_(doseq [[name model]
+                            [[db-name    'Database]
+                             [table-name 'Table]
+                             [card-name  'Card]
+                             [model-name 'Model]
+                             [dash-name  'Dashboard]]]
+                      (is (some? (db/select model :name name))))))))))))

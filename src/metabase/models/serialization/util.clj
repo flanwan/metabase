@@ -15,7 +15,8 @@
    [metabase.models.serialization.hash :as serdes.hash]
    [metabase.shared.models.visualization-settings :as mb.viz]
    [toucan.db :as db]
-   [toucan.models :as models]))
+   [toucan.models :as models]
+   [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
 
@@ -468,12 +469,32 @@
   (when settings
     (update-keys settings #(-> % json/parse-string export-visualizations json/generate-string))))
 
+(def link-card-model->toucan-model
+  "A map from model on link cards to its corresponding toucan model.
+
+  It's here instead of [metabase.models.dashboard] to avoid cyclic deps."
+  {:database  :metabase.models.database/Database
+   :table     :metabase.models.table/Table
+   :dashboard :metabase.models.dashboard/Dashboard
+   :card      :metabase.models.card/Card
+   :dataset   :metabase.models.card/Card})
+
+(defn- export-viz-link-card
+  [settings]
+  (m/update-existing-in
+    settings
+    [:link :entity]
+    (fn [{:keys [id model] :as entity}]
+      (merge entity
+             {:id (export-fk id (link-card-model->toucan-model (keyword model)))}))))
+
 (defn export-visualization-settings
   "Given the `:visualization_settings` map, convert all its field-ids to portable `[db schema table field]` form."
   [settings]
   (when settings
     (-> settings
         export-visualizations
+        export-viz-link-card
         (update :column_settings export-column-settings))))
 
 (defn- import-visualizations [entity]
@@ -499,6 +520,16 @@
   (when settings
     (update-keys settings #(-> % name json/parse-string import-visualizations json/generate-string))))
 
+(defn- import-viz-link-card
+  [settings]
+  (m/update-existing-in
+    settings
+    [:link :entity]
+    (fn [{:keys [id model] :as entity}]
+      (merge entity
+             {:id (import-fk id
+                             (link-card-model->toucan-model (keyword model)))}))))
+
 (defn import-visualization-settings
   "Given an EDN value as exported by [[export-visualization-settings]], convert its portable `[db schema table field]`
   references into Field IDs."
@@ -506,6 +537,7 @@
   (when settings
     (-> settings
         import-visualizations
+        import-viz-link-card
         (update :column_settings import-column-settings))))
 
 (defn visualization-settings-deps
