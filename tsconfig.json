@@ -1,14 +1,6 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react",
-    "target": "esnext",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowSyntheticDefaultImports": true,
-    "module": "commonjs",
-    "isolatedModules": true,
-    "strict": true,
-    "moduleResolution": "node",
-    "skipLibCheck": true,
     "paths": {
       "*": [
         "./frontend/src/*",
@@ -16,12 +8,7 @@
         "./enterprise/frontend/src/*",
         "./enterprise/frontend/test/*"
       ]
-    },
-    "allowJs": true,
-    "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    }
   },
   "include": [
     "frontend/src/**/*",
