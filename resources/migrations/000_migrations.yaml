@@ -14208,6 +14208,13 @@ databaseChangeLog:
             constraintName: fk_sandboxes_ref_permissions
             nullable: true
 
+  - changeSet:
+      id: v46.00-080
+      author: noahmoss
+      comment: Migrate data permission paths from v1 to v2 (splitting them into separate data and query permissions)
+      changes:
+        - customChange:
+            class: "metabase.db.custom_migrations.SplitDataPermissions"
 
 # >>>>>>>>>> DO NOT ADD NEW MIGRATIONS BELOW THIS LINE! ADD THEM ABOVE <<<<<<<<<<
 
