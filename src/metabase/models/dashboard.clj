@@ -4,9 +4,7 @@
    [clojure.data :refer [diff]]
    [clojure.set :as set]
    [clojure.string :as str]
-   [medley.core :as m]
    [metabase.automagic-dashboards.populate :as populate]
-   [metabase.db :as mdb]
    [metabase.db.query :as mdb.query]
    [metabase.events :as events]
    [metabase.models.card :as card :refer [Card]]
@@ -14,7 +12,6 @@
    [metabase.models.dashboard-card
     :as dashboard-card
     :refer [DashboardCard]]
-   [metabase.models.database :refer [Database]]
    [metabase.models.field-values :as field-values]
    [metabase.models.interface :as mi]
    [metabase.models.parameter-card :as parameter-card]
@@ -27,12 +24,10 @@
    [metabase.models.serialization.base :as serdes.base]
    [metabase.models.serialization.hash :as serdes.hash]
    [metabase.models.serialization.util :as serdes.util]
-   [metabase.models.table :refer [Table]]
    [metabase.moderation :as moderation]
    [metabase.public-settings :as public-settings]
    [metabase.query-processor.async :as qp.async]
    [metabase.util :as u]
-   [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :as i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.schema :as su]
@@ -42,123 +37,23 @@
    [toucan.models :as models]
    [toucan2.core :as t2]))
 
-(comment moderation/keep-me)
-
-(models/defmodel Dashboard :report_dashboard)
-
 ;;; --------------------------------------------------- Hydration ----------------------------------------------------
-
-(def ^:private all-card-info-columns
-  {:model         :text
-   :id            :integer
-   :name          :text
-   :description   :text
-
-   ;; for cards and datasets
-   :collection_id :integer
-   :display       :text
-
-   ;; for tables
-   :db_id        :integer})
-
-(def ^:private  link-card-columns-for-model*
-  {:database  #{:id :name :description}
-   :table     #{:id :name :description :db_id}
-   :dashboard #{:id :name :description :collection_id}
-   :card      #{:id :name :description :collection_id :display}
-   :dataset   #{:id :name :description :collection_id :display}})
-
-(defn- link-card-columns-for-model
-  [model]
-  (let [model-cols-set (link-card-columns-for-model* model)]
-    (for [[col col-type] all-card-info-columns]
-      (cond
-        (= col :model)
-        [(h2x/literal model) :model]
-
-        (model-cols-set col)
-        col
-        ;; This entity is missing the column, project a null for that column value. For Postgres and H2, cast it to the
-        ;; correct type, e.g.
-        ;;
-        ;;    SELECT cast(NULL AS integer)
-        ;;
-        ;; For MySQL, this is not needed.
-        :else
-        [(when-not (= (mdb/db-type) :mysql)
-           [:cast nil col-type])
-         col]))))
-
-(def ^:private link-card-model->toucan-model
-  {:database  Database
-   :table     Table
-   :dashboard Dashboard
-   :card      Card
-   :dataset   Card})
-
-(defn- link-card-info-query-for-model
-  [[model ids]]
-  {:select (link-card-columns-for-model model)
-   :from   (t2/table-name (link-card-model->toucan-model model))
-   :where  [:in :id ids]})
-
-(defn- link-card-info-query
-  [link-card-model->ids]
-  (if (= 1 (count link-card-model->ids))
-    (link-card-info-query-for-model (first link-card-model->ids))
-    {:select   [:*]
-     :from     [[{:union-all (map link-card-info-query-for-model link-card-model->ids)}
-                 :alias_is_required_by_sql_but_not_needed_here]]}))
-
-(def ^:private link-card-models
-  #{"database" "table" "dataset" "card" "dashboard"})
-
-(defn- with-link-card-info
-  "Hydrate info for link cards.
-
-  Link cards are dashcards that link to internal entities like Database/Dashboard/... or an url.
-  This function will update any dashboard that are link cards in the `ordered-cards` and get its info (i.e: name, description)"
-  [ordered-cards]
-  (let [entity-path        [:visualization_settings :link :entity]
-        ;; find all dashcards that are link-cards and get its model, id
-        ;; [[:table #{1 2}] [:database #{3 4}]]
-        model-and-ids      (->> ordered-cards
-                                (filter #(link-card-models (get-in % (conj entity-path :model))))
-                                (map #(get-in % entity-path))
-                                (group-by :model)
-                                (map (fn [[k v]] [(keyword k) (set (map :id v))])))
-        ;; query all entities in 1 db call
-        ;; {[:table 3] {:name ...}}
-        model-and-id->info (when (seq model-and-ids)
-                             (-> (m/index-by (juxt :model :id) (t2/query (link-card-info-query model-and-ids)))
-                                 (update-vals (fn [{model :model :as instance}]
-                                                (if (mi/can-read? (t2/instance (link-card-model->toucan-model (keyword model)) instance))
-                                                  instance
-                                                  {:restricted true})))))]
-    (map (fn [card]
-           (if-let [model-info (->> (get-in card entity-path)
-                                    ((juxt :model :id))
-                                    (get model-and-id->info))]
-             (assoc-in card entity-path model-info)
-             card))
-         ordered-cards)))
 
 (mi/define-simple-hydration-method ordered-cards
   :ordered_cards
   "Return the DashboardCards associated with `dashboard`, in the order they were created."
   [dashboard-or-id]
-  (with-link-card-info
-    (t2/select DashboardCard
-               {:select    [:dashcard.* [:collection.authority_level :collection_authority_level]]
-                :from      [[:report_dashboardcard :dashcard]]
-                :left-join [[:report_card :card] [:= :dashcard.card_id :card.id]
-                            [:collection :collection] [:= :collection.id :card.collection_id]]
-                :where     [:and
-                            [:= :dashcard.dashboard_id (u/the-id dashboard-or-id)]
-                            [:or
-                             [:= :card.archived false]
-                             [:= :card.archived nil]]] ; e.g. DashCards with no corresponding Card, e.g. text Cards
-                :order-by  [[:dashcard.created_at :asc]]})))
+  (t2/select DashboardCard
+             {:select    [:dashcard.* [:collection.authority_level :collection_authority_level]]
+              :from      [[:report_dashboardcard :dashcard]]
+              :left-join [[:report_card :card] [:= :dashcard.card_id :card.id]
+                          [:collection :collection] [:= :collection.id :card.collection_id]]
+              :where     [:and
+                          [:= :dashcard.dashboard_id (u/the-id dashboard-or-id)]
+                          [:or
+                           [:= :card.archived false]
+                           [:= :card.archived nil]]] ; e.g. DashCards with no corresponding Card, e.g. text Cards
+              :order-by  [[:dashcard.created_at :asc]]}))
 
 
 (mi/define-batched-hydration-method collections-authority-level
@@ -175,6 +70,9 @@
       (for [dashboard dashboards]
         (assoc dashboard :collection_authority_level (get coll-id->level (u/the-id dashboard)))))))
 
+(comment moderation/keep-me)
+
+(models/defmodel Dashboard :report_dashboard)
 
 (derive Dashboard ::perms/use-parent-collection-perms)
 
