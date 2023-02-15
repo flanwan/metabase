@@ -4,6 +4,7 @@
    [clojure.data :refer [diff]]
    [clojure.set :as set]
    [clojure.string :as str]
+   [medley.core :as m]
    [metabase.automagic-dashboards.populate :as populate]
    [metabase.db.query :as mdb.query]
    [metabase.events :as events]
@@ -28,6 +29,7 @@
    [metabase.public-settings :as public-settings]
    [metabase.query-processor.async :as qp.async]
    [metabase.util :as u]
+   [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :as i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.schema :as su]
@@ -35,25 +37,90 @@
    [toucan.db :as db]
    [toucan.hydrate :refer [hydrate]]
    [toucan.models :as models]
-   [toucan2.core :as t2]))
+   [toucan2.core :as t2]
+   [toucan2.model :as t2.model]))
 
 ;;; --------------------------------------------------- Hydration ----------------------------------------------------
+
+(def ^:private link-card-columns-for-model
+  {:database  [:id :name :description [nil :display]]
+   :table     [:id :name :description [nil :display]]
+   :dashboard [:id :name :description [nil :display]]
+   :card      [:id :name :description :display]
+   :dataset   [:id :name :description :display]})
+
+(defn- link-card-model->toucan-model
+  [model]
+  (-> ({:database  'Database
+        :table     'Table
+        :dashboard 'Dashboard
+        :card      'Card
+        :dataset   'Card}
+       model)
+      t2.model/resolve-model
+      t2/table-name))
+
+(defn- link-card-info-query-for-model
+  [[model ids]]
+  {:select (cons [(h2x/literal model) :model] (link-card-columns-for-model model))
+   :from   (link-card-model->toucan-model model)
+   :where  [:in :id ids]})
+
+(defn- link-card-info-query
+  [link-card-model->ids]
+  (if (= 1 (count link-card-model->ids))
+    (link-card-info-query-for-model (first link-card-model->ids))
+    {:select   [:*]
+     :from     [[{:union-all (map link-card-info-query-for-model link-card-model->ids)}
+                 :alias_is_required_by_sql_but_not_needed_here]]}))
+
+(def ^:private link-card-models
+  #{"database" "table" "dataset" "card" "dashboard"})
+
+(defn- with-link-card-info
+  "Hydrate info for link cards.
+
+  Link cards are dashcards that link to internal entities like Database/Dashboard/... or an url.
+  This function will update any dashboard that are link cards in the `ordered-cards` and get its info (i.e: name, description)"
+  [ordered-cards]
+  (let [entity-path        [:visualization_settings :link :entity]
+        ;; find all dashcards that are link-cards and get its model, id
+        ;; [[:table #{1 2}] [:database #{3 4}]]
+        model-and-ids      (->> ordered-cards
+                                (filter #(link-card-models (get-in % (conj entity-path :model))))
+                                (map #(get-in % entity-path))
+                                (group-by :model)
+                                (map (fn [[k v]] [(keyword k) (set (map :id v))])))
+                  ;; query all entities in 1 db call
+                  ;; {[:table 3] {:name ...}}
+        model-and-id->info (when (seq model-and-ids)
+                             (->> (t2/query (link-card-info-query model-and-ids))
+                                  (m/index-by (juxt :model :id))))]
+    (map (fn [card]
+           (if-let [model-info (->> (get-in card entity-path)
+                                    ((juxt :model :id))
+                                    (get model-and-id->info))]
+             (update-in card entity-path merge model-info)
+             card))
+         ordered-cards)))
 
 (mi/define-simple-hydration-method ordered-cards
   :ordered_cards
   "Return the DashboardCards associated with `dashboard`, in the order they were created."
   [dashboard-or-id]
-  (t2/select DashboardCard
-             {:select    [:dashcard.* [:collection.authority_level :collection_authority_level]]
-              :from      [[:report_dashboardcard :dashcard]]
-              :left-join [[:report_card :card] [:= :dashcard.card_id :card.id]
-                          [:collection :collection] [:= :collection.id :card.collection_id]]
-              :where     [:and
-                          [:= :dashcard.dashboard_id (u/the-id dashboard-or-id)]
-                          [:or
-                           [:= :card.archived false]
-                           [:= :card.archived nil]]] ; e.g. DashCards with no corresponding Card, e.g. text Cards
-              :order-by  [[:dashcard.created_at :asc]]}))
+  (with-link-card-info
+    (t2/select DashboardCard
+               {:select    [:dashcard.* [:collection.authority_level :collection_authority_level]]
+                :from      [[:report_dashboardcard :dashcard]]
+                :left-join [[:report_card :card] [:= :dashcard.card_id :card.id]
+                            [:collection :collection] [:= :collection.id :card.collection_id]]
+                :where     [:and
+                            [:= :dashcard.dashboard_id (u/the-id dashboard-or-id)]
+                            [:or
+                             [:= :card.archived false]
+                             [:= :card.archived nil]]] ; e.g. DashCards with no corresponding Card, e.g. text Cards
+                :order-by  [[:dashcard.created_at :asc]]})))
+
 
 (mi/define-batched-hydration-method collections-authority-level
   :collection_authority_level

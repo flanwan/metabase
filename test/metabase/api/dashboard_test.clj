@@ -15,6 +15,7 @@
     :refer [Action
             Card
             Collection
+            Database
             Dashboard
             DashboardCard
             DashboardCardSeries
@@ -224,51 +225,52 @@
   (mt/dataset sample-dataset
     (mt/with-column-remappings [orders.user_id people.name]
       (binding [api/*current-user-permissions-set* (atom #{"/"})]
-        (t2.with-temp/with-temp [Dashboard {dashboard-id :id} {:name             "Test Dashboard"
-                                                               :creator_id       (mt/user->id :crowberto)
-                                                               :embedding_params {:id "enabled", :name "enabled", :source "enabled", :user_id "enabled"}
-                                                               :parameters       [{:name "Id", :slug "id", :id "a", :type :id}
-                                                                                  {:name "Name", :slug "name", :id "b", :type :category}
-                                                                                  {:name "Source", :slug "source", :id "c", :type :category}
-                                                                                  {:name "User", :slug "user_id", :id "d", :type :id}]}
-                                 Card {card-id :id} {:database_id   (mt/id)
-                                                     :query_type    :native
-                                                     :name          "test question"
-                                                     :creator_id    (mt/user->id :crowberto)
-                                                     :dataset_query {:type     :native
-                                                                     :native   {:query "SELECT COUNT(*) FROM people WHERE {{id}} AND {{name}} AND {{source}} /* AND {{user_id}} */"
-                                                                                :template-tags
-                                                                                {"id"      {:name         "id"
-                                                                                            :display-name "Id"
-                                                                                            :type         :dimension
-                                                                                            :dimension    [:field (mt/id :people :id) nil]
-                                                                                            :widget-type  :id
-                                                                                            :default      nil}
-                                                                                 "name"    {:name         "name"
-                                                                                            :display-name "Name"
-                                                                                            :type         :dimension
-                                                                                            :dimension    [:field (mt/id :people :name) nil]
-                                                                                            :widget-type  :category
-                                                                                            :default      nil}
-                                                                                 "source"  {:name         "source"
-                                                                                            :display-name "Source"
-                                                                                            :type         :dimension
-                                                                                            :dimension    [:field (mt/id :people :source) nil]
-                                                                                            :widget-type  :category
-                                                                                            :default      nil}
-                                                                                 "user_id" {:name         "user_id"
-                                                                                            :display-name "User"
-                                                                                            :type         :dimension
-                                                                                            :dimension    [:field (mt/id :orders :user_id) nil]
-                                                                                            :widget-type  :id
-                                                                                            :default      nil}}}
-                                                                     :database (mt/id)}}
-                                 DashboardCard _ {:parameter_mappings [{:parameter_id "a", :card_id card-id, :target [:dimension [:template-tag "id"]]}
-                                                                       {:parameter_id "b", :card_id card-id, :target [:dimension [:template-tag "name"]]}
-                                                                       {:parameter_id "c", :card_id card-id, :target [:dimension [:template-tag "source"]]}
-                                                                       {:parameter_id "d", :card_id card-id, :target [:dimension [:template-tag "user_id"]]}]
-                                                  :card_id            card-id
-                                                  :dashboard_id       dashboard-id}]
+        (t2.with-temp/with-temp
+          [Dashboard {dashboard-id :id} {:name             "Test Dashboard"
+                                         :creator_id       (mt/user->id :crowberto)
+                                         :embedding_params {:id "enabled", :name "enabled", :source "enabled", :user_id "enabled"}
+                                         :parameters       [{:name "Id", :slug "id", :id "a", :type :id}
+                                                            {:name "Name", :slug "name", :id "b", :type :category}
+                                                            {:name "Source", :slug "source", :id "c", :type :category}
+                                                            {:name "User", :slug "user_id", :id "d", :type :id}]}
+           Card {card-id :id} {:database_id   (mt/id)
+                               :query_type    :native
+                               :name          "test question"
+                               :creator_id    (mt/user->id :crowberto)
+                               :dataset_query {:type     :native
+                                               :native   {:query "SELECT COUNT(*) FROM people WHERE {{id}} AND {{name}} AND {{source}} /* AND {{user_id}} */"
+                                                          :template-tags
+                                                          {"id"      {:name         "id"
+                                                                      :display-name "Id"
+                                                                      :type         :dimension
+                                                                      :dimension    [:field (mt/id :people :id) nil]
+                                                                      :widget-type  :id
+                                                                      :default      nil}
+                                                           "name"    {:name         "name"
+                                                                      :display-name "Name"
+                                                                      :type         :dimension
+                                                                      :dimension    [:field (mt/id :people :name) nil]
+                                                                      :widget-type  :category
+                                                                      :default      nil}
+                                                           "source"  {:name         "source"
+                                                                      :display-name "Source"
+                                                                      :type         :dimension
+                                                                      :dimension    [:field (mt/id :people :source) nil]
+                                                                      :widget-type  :category
+                                                                      :default      nil}
+                                                           "user_id" {:name         "user_id"
+                                                                      :display-name "User"
+                                                                      :type         :dimension
+                                                                      :dimension    [:field (mt/id :orders :user_id) nil]
+                                                                      :widget-type  :id
+                                                                      :default      nil}}}
+                                               :database (mt/id)}}
+           DashboardCard _ {:parameter_mappings [{:parameter_id "a", :card_id card-id, :target [:dimension [:template-tag "id"]]}
+                                                 {:parameter_id "b", :card_id card-id, :target [:dimension [:template-tag "name"]]}
+                                                 {:parameter_id "c", :card_id card-id, :target [:dimension [:template-tag "source"]]}
+                                                 {:parameter_id "d", :card_id card-id, :target [:dimension [:template-tag "user_id"]]}]
+                            :card_id            card-id
+                            :dashboard_id       dashboard-id}]
           (is (#'api.dashboard/get-dashboard dashboard-id)))))))
 
 (deftest fetch-dashboard-test
@@ -318,6 +320,46 @@
                                                                                        :result_metadata        nil})
                                                    :series                     []}]})
                    (dashboard-response (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id)))))))))
+
+    (testing "a dashboard that has lin cards on it"
+      (let [link-card-viz-setting (fn [model id]
+                                    {:virtual_card {:display "link"}
+                                     :link         {:entity {:id    id
+                                                             :model model}}})]
+        (t2.with-temp/with-temp
+          [Database      {db-id :id}        {:name        "Linked database"
+                                             :description "Linked database desc"}
+           Table         {table-id    :id}  {:db_id        db-id
+                                             :name        "Linked table"
+                                             :description "Linked table desc"}
+           Card          {card-id :id}      {:name        "Linked card"
+                                             :description "Linked card desc"
+                                             :display     "bar"}
+           Card          {model-id :id}     {:dataset     true
+                                             :name        "Linked model"
+                                             :description "Linked model desc"
+                                             :display     "table"}
+           Dashboard     {dash-id :id}      {:name        "Linked Dashboard"
+                                             :description "Linked Dashboard desc"}
+           Dashboard     {dashboard-id :id} {:name        "Test Dashboard"}
+           DashboardCard _                  {:dashboard_id           dashboard-id
+                                             :visualization_settings (link-card-viz-setting "database" db-id)}
+           DashboardCard _                  {:dashboard_id           dashboard-id
+                                             :visualization_settings (link-card-viz-setting "table" table-id)}
+           DashboardCard _                  {:dashboard_id           dashboard-id
+                                             :visualization_settings (link-card-viz-setting "dashboard" dash-id)}
+           DashboardCard _                  {:dashboard_id           dashboard-id
+                                             :visualization_settings (link-card-viz-setting "card" card-id)}
+           DashboardCard _                  {:dashboard_id           dashboard-id
+                                             :visualization_settings (link-card-viz-setting "dataset" model-id)}]
+          (is (=? [{:id db-id    :model "database"  :name "Linked database"  :description "Linked database desc"  :display nil}
+                   {:id table-id :model "table"     :name "Linked table"     :description "Linked table desc"     :display nil}
+                   {:id dash-id  :model "dashboard" :name "Linked Dashboard" :description "Linked Dashboard desc" :display nil}
+                   {:id card-id  :model "card"      :name "Linked card"      :description "Linked card desc"      :display "bar"}
+                   {:id model-id :model "dataset"   :name "Linked model"     :description "Linked model desc"     :display "table"}]
+                  (->> (dashboard-response (mt/user-http-request :rasta :get 200 (format "dashboard/%d" dashboard-id)))
+                       :ordered_cards
+                       (map #(get-in % [:visualization_settings :link :entity]))))))))
 
     (testing "fetch a dashboard with a param in it"
       (mt/with-temp* [Table         [{table-id :id} {}]
