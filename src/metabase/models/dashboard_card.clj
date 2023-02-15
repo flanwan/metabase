@@ -264,17 +264,10 @@
            [:cast nil col-type])
          col]))))
 
-(def ^:private link-card-model->toucan-model
-  {:database  :metabase.models.database/Database
-   :table     :metabase.models.table/Table
-   :dashboard :metabase.models.dashboard/Dashboard
-   :card      :metabase.models.card/Card
-   :dataset   :metabase.models.card/Card})
-
 (defn- link-card-info-query-for-model
   [[model ids]]
   {:select (link-card-columns-for-model model)
-   :from   (t2/table-name (link-card-model->toucan-model model))
+   :from   (t2/table-name (serdes.util/link-card-model->toucan-model model))
    :where  [:in :id ids]})
 
 (defn- link-card-info-query
@@ -307,10 +300,14 @@
         ;; {[:table 3] {:name ...}}
         model-and-id->info (when (seq model-and-ids)
                              (-> (m/index-by (juxt :model :id) (t2/query (link-card-info-query model-and-ids)))
-                                 (update-vals (fn [{model :model :as instance}]
-                                                (if (mi/can-read? (t2/instance (link-card-model->toucan-model (keyword model)) instance))
-                                                  instance
-                                                  {:restricted true})))))]
+                                 (update-vals
+                                   (fn [{model :model :as instance}]
+                                     (if (mi/can-read?
+                                           (t2/instance
+                                             (serdes.util/link-card-model->toucan-model (keyword model))
+                                             instance))
+                                       instance
+                                       {:restricted true})))))]
     (if model-and-id->info
       (map (fn [card]
              (if-let [model-info (->> (get-in card entity-path)

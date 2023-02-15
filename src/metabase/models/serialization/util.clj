@@ -15,8 +15,7 @@
    [metabase.models.serialization.hash :as serdes.hash]
    [metabase.shared.models.visualization-settings :as mb.viz]
    [toucan.db :as db]
-   [toucan.models :as models]
-   [toucan2.core :as t2]))
+   [toucan.models :as models]))
 
 (set! *warn-on-reflection* true)
 
@@ -386,11 +385,6 @@
            (and (= k :snippet-id)   (portable-id? v)) #{[{:model "NativeQuerySnippet" :id v}]}
            (and (= k :card_id)      (string? v))      #{[{:model "Card" :id v}]}
            (and (= k :card-id)      (string? v))      #{[{:model "Card" :id v}]}
-           ;; link card in dashcard viz-settings
-           (and (= k :entity)       (map? v))         #{(case (:model v)
-                                                           "table" (table->path (:id v))
-                                                           [{:model (link-card-model->toucan-model-str (:model v))
-                                                             :id    (:id v)}])}
            (map? v)                                   (mbql-deps-map v)
            (vector? v)                                (mbql-deps-vector v)))
        (reduce set/union #{})))
@@ -557,6 +551,14 @@
         import-viz-link-card
         (update :column_settings import-column-settings))))
 
+(defn- viz-link-card-deps
+  [settings]
+  (when-let [{:keys [model id]} (get-in settings [:link :entity])]
+    #{(case model
+        "table" (table->path id)
+        [{:model (link-card-model->toucan-model-str model)
+          :id    id}])}))
+
 (defn visualization-settings-deps
   "Given the :visualization_settings (possibly nil) for an entity, return any embedded serdes-deps as a set.
   Always returns an empty set even if the input is nil."
@@ -564,6 +566,8 @@
   (let [vis-column-settings (some->> viz
                                      :column_settings
                                      keys
-                                     (map (comp mbql-deps json/parse-string name)))]
-    (reduce set/union (cons (mbql-deps viz)
-                            vis-column-settings))))
+                                     (map (comp mbql-deps json/parse-string name)))
+        link-card-deps      (viz-link-card-deps viz)]
+    (->> (concat (mbql-deps viz) [link-card-deps vis-column-settings])
+         (filter some?)
+         (reduce set/union))))

@@ -513,12 +513,10 @@
             [Collection    {coll-id  :id
                             coll-eid :entity_id}     {:name "My Collection"}
              Database      {db-id   :id
-                            db-name :name
-                            db-eid  :entity_id}      {:name        "Linked database"
+                            db-name :name}           {:name        "Linked database"
                                                       :description "Linked database desc"}
              Table         {table-id   :id
-                            table-name :name
-                            table-eid  :entity_id}   {:db_id        db-id
+                            table-name :name}        {:db_id        db-id
                                                       :schema      "Public"
                                                       :name        "Linked table"
                                                       :description "Linked table desc"}
