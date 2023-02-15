@@ -6,6 +6,7 @@
    [metabase.db.spec :as mdb.spec]
    [metabase.driver :as driver]
    [metabase.driver.h2 :as h2]
+   [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.models :refer [Database]]
    [metabase.query-processor :as qp]
@@ -161,12 +162,12 @@
 
 (deftest check-single-select-statement-test
   (mt/test-driver :h2
-    (testing "a single select statement should pass")
-    (is (nil?
-         (#'h2/check-single-select-statement
-          {:database (u/the-id (mt/db))
-           :engine :h2
-           :native {:query "select 1"}})))
+    (testing "a single select statement should pass"
+      (is (nil?
+           (#'h2/check-single-select-statement
+            {:database (u/the-id (mt/db))
+             :engine :h2
+             :native {:query "select 1"}}))))
     (testing "not a single select statement"
       (doseq [query ["update venues set name = 'bill'"
                      "insert into venues (name) values ('bill')"
@@ -183,28 +184,12 @@
                :engine :h2
                :native {:query query}})))))))
 
-(deftest check-ddl-test
+(deftest check-admin-commands-test
   (mt/test-driver :h2
-    (let [check (fn [query]
-                  (#'h2/check-disallow-ddl-commands
-                   {:database (u/the-id (mt/db))
-                    :engine :h2
-                    :native {:query query}}))]
-      (testing "not ddl statements should pass"
-        (doseq [query ["select 1"
-                       "update venues set name = 'bill'"
-                       "delete venues"]]
-          (is (= nil (check query)))))
-      (testing "multiple statements should pass if the first statement isn't ddl"
-        (doseq [query ["select 1; select 2;"
-                       "update venues set name = 'bill'; delete venues;"]]
-          (is (= nil (check query))))
-      (testing "ddl statements shouldn't pass"
-        (doseq [query ["create table foo (id int)"
-                       (str/join "\n" ["DROP TRIGGER IF EXISTS MY_SPECIAL_TRIG;"
-                                       "CREATE OR REPLACE TRIGGER MY_SPECIAL_TRIG BEFORE SELECT ON INFORMATION_SCHEMA.Users AS '';"
-                                       "SELECT * FROM INFORMATION_SCHEMA.Users;"])]]
-          (is (thrown?
-               IllegalArgumentException
-               #"DDL commands are not allowed to be used with h2."
-               (check query)))))))))
+    (testing "admin-only commands should fail to execute"
+      (doseq [command ["RUNSCRIPT FROM 'backup.sql'"
+                       "CREATE OR REPLACE TRIGGER MY_SPECIAL_TRIG BEFORE SELECT ON INFORMATION_SCHEMA.Users AS '';"]]
+        (is (thrown?
+             Exception
+             #"Admin rights are required for this operation"
+             (jdbc/execute! (sql-jdbc.conn/db->pooled-connection-spec (mt/db)) command)))))))
