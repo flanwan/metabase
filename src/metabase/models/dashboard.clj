@@ -98,7 +98,7 @@
 
 (defn- link-card-info-query-for-model
   [[model ids]]
-  {:select (cons [(h2x/literal model) :model] (link-card-columns-for-model model))
+  {:select (link-card-columns-for-model model)
    :from   (t2/table-name (link-card-model->toucan-model model))
    :where  [:in :id ids]})
 
