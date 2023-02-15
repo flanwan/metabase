@@ -61,7 +61,7 @@
    ;; for tables
    :db_id        :integer})
 
-(def ^:private link-card-columns->model
+(def ^:private  link-card-columns-for-model*
   {:database  #{:id :name :description}
    :table     #{:id :name :description :db_id}
    :dashboard #{:id :name :description :collection_id}
@@ -70,7 +70,7 @@
 
 (defn- link-card-columns-for-model
   [model]
-  (let [model-cols-set (link-card-columns->model model)]
+  (let [model-cols-set (link-card-columns-for-model* model)]
     (for [[col col-type] all-card-info-columns]
       (cond
         (= col :model)
