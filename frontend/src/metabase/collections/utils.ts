@@ -33,10 +33,6 @@ export function currentUserPersonalCollections(
 }
 
 function getNonRootParentId(collection: Collection) {
-  if (Array.isArray(collection.effective_ancestors)) {
-    const [, nonRootParent] = collection.effective_ancestors;
-    return nonRootParent ? nonRootParent.id : undefined;
-  }
   // location is a string like "/1/4" where numbers are parent collection IDs
   const nonRootParentId = collection.location?.split("/")?.[0];
   return canonicalCollectionId(nonRootParentId);
@@ -46,6 +42,9 @@ export function isPersonalCollectionChild(
   collection: Collection,
   collectionList: Collection[],
 ): boolean {
+  if (collection.effective_ancestors) {
+    return collection.effective_ancestors.some(c => c.personal_owner_id);
+  }
   const nonRootParentId = getNonRootParentId(collection);
   if (!nonRootParentId) {
     return false;

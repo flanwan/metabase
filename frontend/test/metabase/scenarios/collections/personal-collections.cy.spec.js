@@ -37,7 +37,7 @@ describe("personal collections", () => {
      *  - When the solution for this problem is ready, either adjust the test or completely remove it!
      */
 
-    it.skip("shouldn't get API response containing all other personal collections when visiting the home page (metabase#24330)", () => {
+    it("shouldn't get API response containing all other personal collections when visiting the home page (metabase#24330)", () => {
       cy.intercept("GET", "/api/collection/tree*").as("getCollections");
 
       cy.visit("/");
