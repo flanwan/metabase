@@ -346,6 +346,13 @@
 
 (declare ^:private mbql-deps-map)
 
+(def ^:private link-card-model->toucan-model-str
+  {"card"      "Card"
+   "dataset"   "Card"
+   "table"     "Table"
+   "database"  "Database"
+   "dashboard" "Dashboard"})
+
 (defn- mbql-deps-vector [entity]
   (match entity
          [:field     (field :guard vector?)]      #{(field->path field)}
@@ -379,6 +386,11 @@
            (and (= k :snippet-id)   (portable-id? v)) #{[{:model "NativeQuerySnippet" :id v}]}
            (and (= k :card_id)      (string? v))      #{[{:model "Card" :id v}]}
            (and (= k :card-id)      (string? v))      #{[{:model "Card" :id v}]}
+           ;; link card in dashcard viz-settings
+           (and (= k :entity)       (map? v))         #{(case (:model v)
+                                                           "table" (table->path (:id v))
+                                                           [{:model (link-card-model->toucan-model-str (:model v))
+                                                             :id    (:id v)}])}
            (map? v)                                   (mbql-deps-map v)
            (vector? v)                                (mbql-deps-vector v)))
        (reduce set/union #{})))
@@ -486,7 +498,10 @@
     [:link :entity]
     (fn [{:keys [id model] :as entity}]
       (merge entity
-             {:id (export-fk id (link-card-model->toucan-model (keyword model)))}))))
+             {:id (case model
+                    "table"    (export-table-fk id)
+                    "database" (export-fk-keyed id 'Database :name)
+                    (export-fk id (link-card-model->toucan-model (keyword model))))}))))
 
 (defn export-visualization-settings
   "Given the `:visualization_settings` map, convert all its field-ids to portable `[db schema table field]` form."
@@ -527,8 +542,10 @@
     [:link :entity]
     (fn [{:keys [id model] :as entity}]
       (merge entity
-             {:id (import-fk id
-                             (link-card-model->toucan-model (keyword model)))}))))
+             {:id (case model
+                    "table"    (import-table-fk id)
+                    "database" (import-fk-keyed id 'Database :name)
+                    (import-fk id (link-card-model->toucan-model (keyword model))))}))))
 
 (defn import-visualization-settings
   "Given an EDN value as exported by [[export-visualization-settings]], convert its portable `[db schema table field]`
