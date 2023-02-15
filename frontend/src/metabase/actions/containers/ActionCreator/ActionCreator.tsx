@@ -22,7 +22,7 @@ import type {
 } from "metabase-types/api";
 import type { State } from "metabase-types/store";
 
-import Question from "metabase-lib/Question";
+import Question, { buildQuestion } from "metabase-lib/Question";
 import NativeQuery from "metabase-lib/queries/NativeQuery";
 import Metadata from "metabase-lib/metadata/Metadata";
 
@@ -73,7 +73,7 @@ type Props = OwnProps &
   DispatchProps;
 
 const mapStateToProps = (state: State, { modelCard }: ModelLoaderProps) => ({
-  model: new Question(modelCard, getMetadata(state)),
+  model: buildQuestion({ card: modelCard, metadata: getMetadata(state) }),
   metadata: getMetadata(state),
 });
 
