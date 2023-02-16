@@ -364,7 +364,7 @@
   (mdb.spec/spec :h2 (update details :db (fn [connection-string]
                                            (-> connection-string
                                                connection-string-set-safe-options
-                                               (connection-string-set-option "ACCESS_MODE_DATA=rws"))))))
+                                               (connection-string-set-option "ACCESS_MODE_DATA=rw"))))))
 
 (defmethod sql-jdbc.sync/active-tables :h2
   [& args]
