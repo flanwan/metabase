@@ -4,7 +4,7 @@ import { t } from "ttag";
 import LoadingSpinner from "metabase/components/LoadingSpinner";
 import GroupSelect from "metabase/admin/people/components/GroupSelect";
 
-import type { GroupIds, UserGroupsType } from "../types";
+import type { GroupIds, UserGroupsType } from "metabase/admin/types";
 
 type Props = {
   groups: UserGroupsType;
