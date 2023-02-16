@@ -95,7 +95,7 @@ describe("scenarios > models > actions", () => {
       cy.findByText("Delete").should("be.visible");
     });
 
-    cy.findByRole("button", { name: "New action" }).click();
+    cy.findByRole("link", { name: "New action" }).click();
     fillActionQuery("DELETE FROM orders WHERE id = {{ id }}");
     fieldSettings().findByText("number").click();
     cy.findByRole("button", { name: "Save" }).click();
@@ -228,6 +228,13 @@ function openActionEditorFor(actionName, { isReadOnly = false } = {}) {
     const icon = isReadOnly ? "eye" : "pencil";
     cy.icon(icon).click();
   });
+}
+
+function assertQueryEditorDisabled() {
+  // Ace doesn't act as a normal input, so we can't use `should("be.disabled")`
+  // Instead we'd assert that a user can't type in the editor
+  fillActionQuery("QWERTY");
+  cy.findByText("QWERTY").should("not.exist");
 }
 
 function fieldSettings() {
