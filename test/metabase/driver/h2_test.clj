@@ -44,8 +44,8 @@
                          (-> (sql-jdbc.conn/connection-details->spec :h2 details)
                              :subname
                              (str/split #";"))))))
-      (testing "Check that the subname string for read-write connections includes the `ACCESS_MODE_DATA=rws` option"
-        (is (some? (some #{"ACCESS_MODE_DATA=rws"}
+      (testing "Check that the subname string for read-write connections includes the `ACCESS_MODE_DATA=rw` option"
+        (is (some? (some #{"ACCESS_MODE_DATA=rw"}
                          (-> (sql-jdbc.conn/connection-details->read-write-spec :h2 details)
                              :subname
                              (str/split #";")))))))))
