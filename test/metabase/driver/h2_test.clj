@@ -178,7 +178,13 @@
     (testing "admin-only commands should fail to execute"
       (doseq [command ["RUNSCRIPT FROM 'backup.sql'"
                        "CREATE OR REPLACE TRIGGER MY_SPECIAL_TRIG BEFORE SELECT ON INFORMATION_SCHEMA.Users AS '';"]]
-        (is (thrown?
-             Exception
-             #"Admin rights are required for this operation"
-             (jdbc/execute! (sql-jdbc.conn/db->pooled-connection-spec (mt/db)) command)))))))
+        (testing "read-write connections"
+          (is (thrown?
+               Exception
+               #"Admin rights are required for this operation"
+               (jdbc/execute! (sql-jdbc.conn/connection-details->read-write-spec :h2 (:details (mt/db))) command))))
+        (testing "read-only connections"
+          (is (thrown?
+               Exception
+               #"Admin rights are required for this operation"
+               (jdbc/execute! (sql-jdbc.conn/connection-details->spec :h2 (:details (mt/db))) command))))))))
