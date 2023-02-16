@@ -36,7 +36,7 @@
     (is (= "file:my-file;IFEXISTS=TRUE"
            (#'h2/connection-string-set-safe-options "file:my-file;INIT=ANYTHING_HERE_WILL_BE_IGNORED")))))
 
-(deftest connection-access-mode-data-test
+(deftest access-mode-data-test
   (mt/test-driver :h2
     (let [details (:details (mt/db))]
       (testing "Check that the subname string for read-only connections includes the `ACCESS_MODE_DATA=r` option"
