@@ -568,6 +568,6 @@
                                      keys
                                      (map (comp mbql-deps json/parse-string name)))
         link-card-deps      (viz-link-card-deps viz)]
-    (->> (concat (mbql-deps viz) [link-card-deps vis-column-settings])
+    (->> (concat vis-column-settings [deps link-card-deps])
          (filter some?)
          (reduce set/union))))
