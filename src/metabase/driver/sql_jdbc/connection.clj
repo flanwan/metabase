@@ -25,9 +25,9 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
 (defmulti connection-details->spec
-  "Given a Database `details-map`, return an unpooled JDBC connection spec. Driver authors should implement this method,
-  but you probably shouldn't be *USE* this method directly! If you want a pooled connection spec (which you almost
-  certainly do), use [[db->pooled-connection-spec]] instead.
+  "Given a Database `details-map`, return an unpooled JDBC connection spec for read-only transactions.
+  Driver authors should implement this method, but you probably shouldn't be *USE* this method directly! If you want a
+  pooled connection spec (which you almost certainly do), use [[db->pooled-connection-spec]] instead.
 
   DO NOT USE THIS METHOD DIRECTLY UNLESS YOU KNOW WHAT YOU ARE DOING! THIS RETURNS AN UNPOOLED CONNECTION SPEC! IF YOU
   WANT A CONNECTION SPEC FOR RUNNING QUERIES USE [[db->pooled-connection-spec]] INSTEAD WHICH WILL RETURN A *POOLED*
@@ -37,9 +37,9 @@
   :hierarchy #'driver/hierarchy)
 
 (defmulti connection-details->read-write-spec
-  "Given a Database `details-map`, return an unpooled JDBC connection spec for a read/write connection. Most drivers
-   should not need to implement this method, but some drivers (e.g. H2) need to use a different connection spec for
-   read/write connections."
+  "Given a Database `details-map`, return an unpooled JDBC connection spec for a read and write transactions. Driver
+  authors should usually not need to implement this method, but some drivers (e.g. H2) need to use a different connection
+  spec for enabling writes connections."
   {:arglists '([driver details-map])}
   driver/dispatch-on-initialized-driver
   :hierarchy #'driver/hierarchy)

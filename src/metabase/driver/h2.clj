@@ -356,6 +356,7 @@
   (mdb.spec/spec :h2 (update details :db (fn [connection-string]
                                            (-> connection-string
                                                connection-string-set-safe-options
+                                               ;; sets connection.readOnly to true
                                                (connection-string-set-option "ACCESS_MODE_DATA=r"))))))
 
 (defmethod sql-jdbc.conn/connection-details->read-write-spec :h2
@@ -364,6 +365,7 @@
   (mdb.spec/spec :h2 (update details :db (fn [connection-string]
                                            (-> connection-string
                                                connection-string-set-safe-options
+                                               ;; sets connection.readOnly to false
                                                (connection-string-set-option "ACCESS_MODE_DATA=rw"))))))
 
 (defmethod sql-jdbc.sync/active-tables :h2
