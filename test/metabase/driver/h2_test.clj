@@ -37,6 +37,20 @@
     (is (= "file:my-file;IFEXISTS=TRUE"
            (#'h2/connection-string-set-safe-options "file:my-file;INIT=ANYTHING_HERE_WILL_BE_IGNORED")))))
 
+(deftest connection-access-mode-data-test
+  (mt/test-driver :h2
+    (let [details (:details (mt/db))]
+      (testing "Check that the subname string for read-only connections includes the `ACCESS_MODE_DATA=r` option"
+        (is (some? (some #{"ACCESS_MODE_DATA=r"}
+                         (-> (sql-jdbc.conn/connection-details->spec :h2 details)
+                             :subname
+                             (str/split #";"))))))
+      (testing "Check that the subname string for read-write connections includes the `ACCESS_MODE_DATA=rws` option"
+        (is (some? (some #{"ACCESS_MODE_DATA=rws"}
+                         (-> (sql-jdbc.conn/connection-details->read-write-spec :h2 details)
+                             :subname
+                             (str/split #";")))))))))
+
 (deftest db-details->user-test
   (testing "make sure we return the USER from db details if it is a keyword key in details..."
     (is (= "cam"
