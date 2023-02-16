@@ -22,9 +22,7 @@
    [metabase.util.ssh :as ssh])
   (:import
    (java.sql Clob ResultSet ResultSetMetaData)
-   (java.time OffsetTime)
-   (org.h2.command CommandInterface Parser)
-   (org.h2.engine SessionLocal)))
+   (java.time OffsetTime)))
 
 ;; method impls live in this namespace
 (comment h2.actions/keep-me)
@@ -102,47 +100,9 @@
            (ex-info (tru "Running SQL queries against H2 databases using the default (admin) database user is forbidden.")
                     {:type qp.error-type/db})))))))
 
-(defn- get-field
-  "Returns value of private field. This function is used to bypass field protection to instantiate
-   a low-level H2 Parser object in order to detect DDL statements in queries."
-  [obj field]
-  (.get (doto (.getDeclaredField (class obj) field)
-          (.setAccessible true))
-        obj))
-
-(defn- make-h2-parser
-  "Returns an H2 Parser object for the given (H2) database ID"
-  ^Parser [h2-db-id]
-  (with-open [conn (.getConnection (sql-jdbc.execute/datasource-with-diagnostic-info! :h2 h2-db-id))]
-    ;; The H2 Parser class is created from the H2 JDBC session, but these fields are not public
-    (let [session (-> conn (get-field "inner") (get-field "session"))]
-      ;; Only SessionLocal represents a connection we can create a parser with. Remote sessions and other
-      ;; session types are ignored.
-      (when (instance? SessionLocal session)
-        (Parser. session)))))
-
-(defn- check-single-select-statement
-  [{:keys [database] {:keys [query]} :native}]
-  (when-let [h2-parser (make-h2-parser database)]
-    (when-let [command (try (.prepareCommand h2-parser query)
-                            ;; if the query is invalid, errors will get caught later
-                            (catch Throwable _ nil))]
-      (when (or ;; If the command returned by .prepareCommand is a CommandList, then it is a multi-statement query.
-                ;; We can't allow multiple statements because we can only check the command type for the first statement.
-                (= (type command) org.h2.command.CommandList)
-                ;; This checks the command type of the first statement.
-                ;; see https://github.com/h2database/h2database/blob/master/h2/src/main/org/h2/command/CommandInterface.java
-                (not (contains? #{CommandInterface/SELECT
-                                  CommandInterface/EXPLAIN
-                                  CommandInterface/CALL} (.getCommandType command))))
-        (throw (IllegalArgumentException. "Only a single SELECT statement is allowed."))))))
-
 (defmethod driver/execute-reducible-query :h2
   [driver query chans respond]
   (check-native-query-not-using-default-user query)
-  ;; check the query is a single select statement because the connection is not read only,
-  ;; so it could modify the database otherwise
-  (check-single-select-statement query)
   ((get-method driver/execute-reducible-query :sql-jdbc) driver query chans respond))
 
 (defmethod driver/execute-write-query! :h2
