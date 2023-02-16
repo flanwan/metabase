@@ -36,6 +36,16 @@
   driver/dispatch-on-initialized-driver
   :hierarchy #'driver/hierarchy)
 
+(defmulti connection-details->read-write-spec
+  "Given a Database `details-map`, return an unpooled JDBC connection spec for a read/write connection. Most drivers
+   should not need to implement this method, but some drivers (e.g. H2) need to use a different connection spec for
+   read/write connections."
+  {:arglists '([driver details-map])}
+  driver/dispatch-on-initialized-driver
+  :hierarchy #'driver/hierarchy)
+
+(defmethod connection-details->read-write-spec :default [driver details]
+  (connection-details->spec driver details))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                           Creating Connection Pools                                            |

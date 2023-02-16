@@ -379,10 +379,30 @@
                                                 (into {}))
                                            {"IFEXISTS" "TRUE"}))))
 
+(defn- connection-string-set-option
+  "Set a single option in a connection string. Overrides the option if already present.
+   Assumes option-string is of the form \"key=value\"."
+  [connection-string option-string]
+  {:pre [(string? connection-string)
+         (string? option-string)]}
+  (let [[file options] (connection-string->file+options connection-string)]
+    (file+options->connection-string file (merge options (str/split option-string #"=")))))
+
 (defmethod sql-jdbc.conn/connection-details->spec :h2
   [_ details]
   {:pre [(map? details)]}
-  (mdb.spec/spec :h2 (update details :db connection-string-set-safe-options)))
+  (mdb.spec/spec :h2 (update details :db (fn [connection-string]
+                                           (-> connection-string
+                                               connection-string-set-safe-options
+                                               (connection-string-set-option "ACCESS_MODE_DATA=r"))))))
+
+(defmethod sql-jdbc.conn/connection-details->read-write-spec :h2
+  [_ details]
+  {:pre [(map? details)]}
+  (mdb.spec/spec :h2 (update details :db (fn [connection-string]
+                                           (-> connection-string
+                                               connection-string-set-safe-options
+                                               (connection-string-set-option "ACCESS_MODE_DATA=rws"))))))
 
 (defmethod sql-jdbc.sync/active-tables :h2
   [& args]
