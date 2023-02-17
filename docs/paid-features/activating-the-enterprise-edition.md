@@ -60,3 +60,4 @@ If you're hosting Metabase behind a firewall that blocks outgoing connections, y
 44.199.18.109
 44.212.138.188
 ```
+The communication runs over https, so only port 443 is required.
